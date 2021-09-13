@@ -65,7 +65,7 @@ For example, `here`__ is the ``.pwclientrc`` file for Patchwork itself.
 __ https://patchwork.ozlabs.org/project/patchwork/pwclientrc/
 
 
-```
+```toml
 # Sample .pwclientrc file for the patchwork project,
 # running on patchwork.kernel.org. THIS IS USED in SIGNAL.
 #
