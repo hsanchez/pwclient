@@ -46,6 +46,7 @@ On Ubuntu, run:
    $ sudo apt-get install python-pbr
 
 Once dependencies are installed, clone this repo and run ``setup.py``:
+**(Preferred method for SIGNAL)**
 
 .. code-block:: bash
 
@@ -62,6 +63,37 @@ directory (``$HOME`` or ``~``). Patchwork itself provides sample
 For example, `here`__ is the ``.pwclientrc`` file for Patchwork itself.
 
 __ https://patchwork.ozlabs.org/project/patchwork/pwclientrc/
+
+
+```
+# Sample .pwclientrc file for the patchwork project,
+# running on patchwork.kernel.org. THIS IS USED in SIGNAL.
+#
+# Just append this file to your existing ~/.pwclientrc
+# If you do not already have a ~/.pwclientrc, then copy this file to
+# ~/.pwclientrc, and uncomment the following two lines:
+[options]
+default=linux-block
+
+[linux-block]
+url = https://patchwork.kernel.org/xmlrpc/
+
+[linux-omap]
+url = https://patchwork.kernel.org/xmlrpc/
+```
+
+Examples (that worked :-) )
+-----------
+
+In this example, I used one of the submitters fetched by the mailing-list-scrapper: Alex Shi.
+The goal was to see if that user had any patches in patchwork.kernel.org.
+If found, then it means we can use this tool to make the connection between mailing list's emails
+and patches. This will be useful for SIGNAL.  
+
+```shell
+› pwclient list --submitter "Alex Shi" --in-depth --format csv > all_patches_by_alex.csv
+› pwclient list --submitter "Alex Shi" --state Accepted --in-depth --format csv > all_accepted_patches_by_alex.csv
+```
 
 
 Development
