@@ -15,3 +15,13 @@ def person_ids_by_name(rpc, name, exact_match=False):
         return [x['id'] for x in people]
     else:
         return [x['id'] for x in people if x['name'] == name]
+
+
+def person_get(rpc, person_id):
+    if not person_id:
+        return {}
+    person_id = int(person_id)
+    person = rpc.person_get(person_id)
+    if not person:
+        return {}
+    return {'name': person['name'], 'email': person['email']}

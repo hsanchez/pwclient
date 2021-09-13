@@ -54,7 +54,7 @@ def _get_filter_parser():
     filter_parser.add_argument(
         '-f', '--format', metavar='FORMAT',
         help=("print output in the given format. You can use tags matching "
-              "fields, e.g. %%{id}, %%{state}, %%{msgid}, or csv."))
+              "fields, e.g. %%{id}, %%{state}, %%{msgid}, or (simple, table, csv)."))
     filter_parser.add_argument(
         'patch_name', metavar='STR', nargs='?',
         help='substring to search for patches by name')
@@ -185,12 +185,6 @@ installed locales.
     list_parser.add_argument(
         '--in-depth', action='store_true', dest='in_depth',
         help="pass '--in-depth' to 'list'")
-    list_parser.add_argument(
-        '--month', action='store', dest='month', type=int,
-        help="pass '--month' to 'list'")
-    list_parser.add_argument(
-        '--year', action='store', dest='year', type=int,
-        help="pass '--year' to 'list'")
     list_parser.set_defaults(subcmd='list')
 
     # Poor man's argparse aliases: we register the "search" parser but

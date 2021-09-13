@@ -15,8 +15,11 @@ import time
 import tqdm
 from dateutil import parser as dateparser
 
-from . import people, projects, states
+from . import people, projects, states, utils
 from .xmlrpc import xmlrpclib
+
+_LIST_HEADERS = (
+    'ID', 'Date', 'Name', 'Submitter', 'State', 'Archived', 'Delegate', 'MessageId', 'CommitRef')
 
 
 class Patch(object):
@@ -28,8 +31,10 @@ class Patch(object):
         @patch_dict: The dictionary version of the patch.
         """
         # Make it easy to compare times of patches by getting an int.
-        self.time = time.mktime(time.strptime(str(patch_dict["date"].data, 'utf-8'),
-                                              "%Y-%m-%d %H:%M:%S"))
+        date_data_str = utils.ensure_str(patch_dict["date"])
+        # self.time = time.mktime(time.strptime(str(patch_dict["date"].data, 'utf-8'),
+        #                                       "%Y-%m-%d %H:%M:%S"))
+        self.time = time.mktime(time.strptime(date_data_str, "%Y-%m-%d %H:%M:%S"))
 
         self.version, self.part_num, self.num_parts = \
             self._parse_patch_name(patch_dict["name"])
@@ -139,8 +144,42 @@ def patch_id_from_hash(rpc, project, hash):
     return patch_id
 
 
-def _list_patches(patches, format_str=None, get_recs_only=False):
+def _list_patches(patches, rpc=None, format_str=None, get_recs_only=False, echo_via_pager=False):
     """Dump a list of patches to stdout."""
+    if get_recs_only and not echo_via_pager:
+        return [patch for patch in patches]
+    elif echo_via_pager:
+        assert rpc is not None
+        def person_info_str(person_dic):
+            return utils.trim('%s (%s)' % (person_dic.get('name', ''),
+                                           person_dic.get('email', '')))
+        
+        # New formatting functionality and will
+        # replace the old formatting api next.
+        output = []
+        for patch in patches:
+            submitter_str = person_info_str(people.person_get(rpc, patch['submitter_id']))
+            delegate_str = person_info_str(people.person_get(rpc, patch['delegate_id']))
+            commit_ref_str = utils.ensure_str(patch['commit_ref']) 
+            item = [
+                patch['id'],
+                utils.ensure_str(patch['date']),
+                utils.trim(patch['name']),
+                submitter_str if '()' not in submitter_str else 'NA',
+                patch['state'],
+                'yes' if patch['archived'] else 'no',
+                delegate_str if '()' not in delegate_str else 'NA',
+                utils.ensure_str(patch['msgid']).strip("<>"),
+                commit_ref_str if commit_ref_str != '' else 'NA',
+            ]
+            
+            output.append([])
+            for idx, _ in enumerate(_LIST_HEADERS):
+                output[-1].append(item[idx])
+            
+        utils.echo_via_pager(output, _LIST_HEADERS, format_str)
+    
+    # old formatting api
     if format_str:
         format_field_re = re.compile("%{([a-z0-9_]+)}")
 
@@ -154,20 +193,14 @@ def _list_patches(patches, format_str=None, get_recs_only=False):
                 val = str(patch[fieldname])
 
             return val
-        
-        if get_recs_only:
-            return [patch for patch in patches]
 
         for patch in patches:
             print(format_field_re.sub(patch_field, format_str))
     else:
-        if get_recs_only:
-            return [patch for patch in patches]
-
         print("%-7s %-12s %-15s %-15s %s" % ("ID", "State", "MessageId", "Date", "Name"))
         print("%-7s %-12s %-15s %-15s %s"  % ("--", "-----", "----", "----","----"))
         for patch in patches:
-            date_value = str(patch['date'].data, 'utf-8')
+            date_value = utils.ensure_str(patch['date'])
             date_str = dateparser.parse(date_value).strftime('%Y-%m-%dT%H:%M:%S')
             print("%-7d %-12s %-15s %-15s %s" %
                   (patch['id'], patch['state'], patch['msgid'], date_str, patch['name']))
@@ -254,7 +287,7 @@ def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_
                 break
         except Exception as e:
             print(f"Unable to explore project {linkname_}. Error: {e}")
-    _list_patches(all_patches, format_str)
+    _list_patches(all_patches, rpc=rpc, format_str=format_str, echo_via_pager=True)
 
 
 def patch_id_to_series(rpc, patch_id):
@@ -324,8 +357,9 @@ def action_info(rpc, patch_id):
         # Some values are transferred as Binary data, these are encoded in
         # utf-8. As of Python 3.9 xmlrpclib.Binary.__str__ however assumes
         # latin1, so decode explicitly
-        if type(value) == xmlrpclib.Binary:
-            value = str(value.data, 'utf-8')
+        value = utils.ensure_str(value)
+        # if type(value) == xmlrpclib.Binary:
+        #     value = str(value.data, 'utf-8')
         print("- %- 14s: %s" % (key, value))
 
 
