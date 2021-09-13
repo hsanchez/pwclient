@@ -125,8 +125,13 @@ def main(argv=sys.argv[1:]):
         submitter_str = args.submitter
         delegate_str = args.delegate
         format_str = args.format
-
-        patches.action_list(rpc, filt, submitter_str, delegate_str, format_str)
+        series_str = args.series
+        
+        if args.in_depth:
+            # Check for patches in all projects in 
+            patches.action_list_all_patchwork(rpc, filt, submitter_str, delegate_str, series_str, format_str)
+        else:
+            patches.action_list(rpc, filt, submitter_str, delegate_str, series_str, format_str)
 
     elif action.startswith('project'):
         projects.action_list(rpc)

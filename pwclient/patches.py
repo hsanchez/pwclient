@@ -4,16 +4,71 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
+import collections
 import io
 import os
 import re
 import subprocess
 import sys
+import time
 
+import tqdm
+from dateutil import parser as dateparser
+
+from . import people, projects, states
 from .xmlrpc import xmlrpclib
-from . import people
-from . import projects
-from . import states
+
+
+class Patch(object):
+    """Nicer representation of a patch from the server."""
+
+    def __init__(self, patch_dict):
+        """Patch constructor.
+
+        @patch_dict: The dictionary version of the patch.
+        """
+        # Make it easy to compare times of patches by getting an int.
+        self.time = time.mktime(time.strptime(str(patch_dict["date"].data, 'utf-8'),
+                                              "%Y-%m-%d %H:%M:%S"))
+
+        self.version, self.part_num, self.num_parts = \
+            self._parse_patch_name(patch_dict["name"])
+
+        # Add a few things to make it easier...
+        self.id = patch_dict["id"]
+        self.project_id = patch_dict["project_id"]
+        self.name = patch_dict["name"]
+        self.submitter_id = patch_dict["submitter_id"]
+
+        # Keep the dict in case we need anything else...
+        self.dict = patch_dict
+
+    @staticmethod
+    def _parse_patch_name(name):
+        """Parse a patch name into version, part_num, num_parts.
+
+        @name: The patch name.
+        @return: (version, part_num, num_parts)
+        """
+        mo = re.match(r"\[v(\d*),(\d*)/(\d*)\]", name)
+        if mo:
+            return mo.groups()
+
+        mo = re.match(r"\[(\d*)/(\d*)\]", name)
+        if mo:
+            return (1, mo.groups()[0], mo.groups()[1])
+
+        mo = re.match(r"\[v(\d*)]", name)
+        if mo:
+            return (mo.groups()[0], 1, 1)
+
+        return (1, 1, 1)
+
+    def __str__(self):
+        return str(self.dict)
+
+    def __repr__(self):
+        return repr(self.dict)
 
 
 class Filter(object):
@@ -84,7 +139,7 @@ def patch_id_from_hash(rpc, project, hash):
     return patch_id
 
 
-def _list_patches(patches, format_str=None):
+def _list_patches(patches, format_str=None, get_recs_only=False):
     """Dump a list of patches to stdout."""
     if format_str:
         format_field_re = re.compile("%{([a-z0-9_]+)}")
@@ -99,37 +154,61 @@ def _list_patches(patches, format_str=None):
                 val = str(patch[fieldname])
 
             return val
+        
+        if get_recs_only:
+            return [patch for patch in patches]
 
         for patch in patches:
             print(format_field_re.sub(patch_field, format_str))
     else:
-        print("%-7s %-12s %s" % ("ID", "State", "Name"))
-        print("%-7s %-12s %s" % ("--", "-----", "----"))
+        if get_recs_only:
+            return [patch for patch in patches]
+
+        print("%-7s %-12s %-15s %-15s %s" % ("ID", "State", "MessageId", "Date", "Name"))
+        print("%-7s %-12s %-15s %-15s %s"  % ("--", "-----", "----", "----","----"))
         for patch in patches:
-            print("%-7d %-12s %s" %
-                  (patch['id'], patch['state'], patch['name']))
+            date_value = str(patch['date'].data, 'utf-8')
+            date_str = dateparser.parse(date_value).strftime('%Y-%m-%dT%H:%M:%S')
+            print("%-7d %-12s %-15s %-15s %s" %
+                  (patch['id'], patch['state'], patch['msgid'], date_str, patch['name']))
 
+    return []
 
-def action_list(rpc, filters, submitter_str, delegate_str, format_str=None):
+def action_list(rpc, filters, submitter_str, delegate_str, series_str, format_str=None, get_recs_only=False):
     filters.resolve_ids(rpc)
+    
+    if series_str and series_str != "":
+        try:
+            patch_id = int(series_str)
+        except:
+            sys.stderr.write("Invalid patch ID given\n")
+            sys.exit(1)
+
+        patches = patch_id_to_series(rpc, patch_id)
+        return _list_patches([patch.dict for patch in patches], format_str=format_str, get_recs_only=get_recs_only)
 
     if submitter_str is not None:
+        submitter_patches = []
         ids = people.person_ids_by_name(rpc, submitter_str)
+        if not get_recs_only:
+            print(f"people found: {len(ids)}")
         if len(ids) == 0:
             sys.stderr.write("Note: Nobody found matching *%s*\n" %
                              submitter_str)
         else:
             for id in ids:
                 person = rpc.person_get(id)
-                print('Patches submitted by %s <%s>:' %
-                      (person['name'], person['email']))
+                if not get_recs_only:
+                    print('Patches submitted by %s <%s>:' %
+                        (person['name'], person['email']))
                 f = filters
                 f.add("submitter_id", id)
                 patches = rpc.patch_list(f.d)
-                _list_patches(patches, format_str)
-        return
+                submitter_patches += _list_patches(patches, format_str, get_recs_only=get_recs_only)
+        return submitter_patches
 
     if delegate_str is not None:
+        delegate_patches = []
         ids = people.person_ids_by_name(rpc, delegate_str)
         if len(ids) == 0:
             sys.stderr.write("Note: Nobody found matching *%s*\n" %
@@ -137,16 +216,97 @@ def action_list(rpc, filters, submitter_str, delegate_str, format_str=None):
         else:
             for id in ids:
                 person = rpc.person_get(id)
-                print('Patches delegated to %s <%s>:' %
-                      (person['name'], person['email']))
+                if not get_recs_only:
+                    print('Patches delegated to %s <%s>:' %
+                        (person['name'], person['email']))
                 f = filters
                 f.add("delegate_id", id)
                 patches = rpc.patch_list(f.d)
-                _list_patches(patches, format_str)
-        return
+                delegate_patches += _list_patches(patches, format_str, get_recs_only=get_recs_only)
+        return delegate_patches
 
     patches = rpc.patch_list(filters.d)
-    _list_patches(patches, format_str)
+    return _list_patches(patches, format_str, get_recs_only=get_recs_only)
+
+
+def get_patch_objects(rpc, filters, submitter_str, delegate_str, series_str, format_str=None):
+    return action_list(rpc, filters, submitter_str, delegate_str, series_str, format_str, get_recs_only=True)
+
+
+def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_str, format_str=None):
+    proj_recs = projects.action_list(rpc, get_recs_only=True)
+    all_patches = []
+    for (_, linkname_) in tqdm.tqdm(proj_recs):
+        # print(f"Exploring project: {linkname_}")
+        # override project's link name 
+        filters.add('project', linkname_)
+        try:
+            matched = get_patch_objects(rpc, filters, submitter_str, delegate_str, series_str, format_str)
+            if matched and len(matched) > 0:
+                all_patches += matched
+                # print(f"Matched found. Found {len(matched)} patches for {linkname_}")
+
+            # break if msg id has been found
+            if matched and 'msgid' in filters.d:
+                break
+            # break if series given series_str (or patch_id) has been fetched
+            elif matched and series_str:
+                break
+        except Exception as e:
+            print(f"Unable to explore project {linkname_}. Error: {e}")
+    _list_patches(all_patches, format_str)
+
+
+def patch_id_to_series(rpc, patch_id):
+    """Take a patch ID and return a list of patches in the same series.
+
+    This function uses the following heuristics to find patches in a series:
+    - It searches for all patches with the same submitter that the same version
+      number and same number of parts.
+    - It allows patches to span multiple projects (though they must all be on
+      the same patchwork server), though it prefers patches that are part of
+      the same project.  This handles cases where some parts in a series might
+      have only been sent to a topic project (like "linux-mmc").
+    - For each part number it finds the matching patch that has a date value
+      closest to the original patch.
+
+    It would be nice to use "Message-ID" and "In-Reply-To", but that's not
+    exported to the xmlrpc interface as far as I can tell.  :(
+
+    @patch_id: The patch ID that's part of the series.
+    @return: A list of patches in the series.
+    """
+    # Find this patch
+    patch = Patch(rpc.patch_get(patch_id))
+
+    # Get the all patches by the submitter, ignoring project.
+    filter = Filter()
+    filter.add("submitter_id", patch.submitter_id)
+    all_patches = [Patch(p) for p in rpc.patch_list(filter.d)]
+
+    # Whittle down--only those with matching version / num_parts.
+    key = (patch.version, patch.num_parts)
+    all_patches = [p for p in all_patches if (p.version, p.num_parts) == key]
+
+    # Organize by part_num.
+    by_part_num = collections.defaultdict(list)
+    for p in all_patches:
+        by_part_num[p.part_num].append(p)
+
+    # Find the part that's closest in time to ours for each part num.
+    final_list = []
+    for part_num, patch_list in sorted(iter(by_part_num.items())):
+        # Create a list of tuples to make sorting easier.  We want to find
+        # the patch that has the closet time.  If there's a tie then we want
+        # the patch that has the same project ID...
+        patch_list = [(abs(p.time - patch.time),
+                       abs(p.project_id - patch.project_id),
+                       p) for p in patch_list]
+
+        best = sorted(patch_list)[0][-1]
+        final_list.append(best)
+
+    return final_list
 
 
 def action_info(rpc, patch_id):

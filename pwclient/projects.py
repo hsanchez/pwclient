@@ -16,11 +16,16 @@ def project_id_by_name(rpc, linkname):
     return 0
 
 
-def action_list(rpc):
+def action_list(rpc, get_recs_only=False):
     projects = rpc.project_list("", 0)
+
+    if get_recs_only:
+        return [(project['id'], project['linkname']) for project in projects]
+    
     print("%-5s %-24s %s" % ("ID", "Name", "Description"))
     print("%-5s %-24s %s" % ("--", "----", "-----------"))
     for project in projects:
         print("%-5d %-24s %s" % (project['id'],
                                  project['linkname'],
                                  project['name']))
+    return []
