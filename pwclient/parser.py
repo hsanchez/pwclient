@@ -113,6 +113,21 @@ installed locales.
         'projects',
         help="list all projects")
     projects_parser.set_defaults(subcmd='projects')
+    
+    people_parser = subparsers.add_parser(
+        'people',
+        help="list people")
+    people_parser.add_argument(
+        'person_name', metavar='PERSON_NAME', nargs='+', action='store', default=[],
+        help="person NAME")
+    people_parser.add_argument(
+        '--exact-name', action='store_true', dest='exact_name',
+        help="pass '--exact-name' to 'people'")
+    people_parser.add_argument(
+        '-f', '--format', metavar='FORMAT',
+        help=("print output in the given format. You can use tags matching "
+              "fields, e.g. simple, table, or csv."))
+    people_parser.set_defaults(subcmd='people')
 
     check_get_parser = subparsers.add_parser(
         'check-get', add_help=False,
