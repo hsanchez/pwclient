@@ -126,7 +126,7 @@ def main(argv=sys.argv[1:]):
         series_str = args.series
         
         if args.in_depth:
-            # Check for patches in all projects in 
+            # Check for patches in all projects in patchwork
             patches.action_list_all_patchwork(rpc, filt, submitter_str, delegate_str, series_str, format_str)
         else:
             patches.action_list(rpc, filt, submitter_str, delegate_str, series_str, format_str)
