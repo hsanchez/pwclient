@@ -178,7 +178,7 @@ def _list_patches(patches, rpc=None, format_str=None, get_recs_only=False, echo_
                 output[-1].append(item[idx])
             
         utils.echo_via_pager(output, _LIST_HEADERS, format_str)
-    
+        return []
     # old formatting api
     if format_str:
         format_field_re = re.compile("%{([a-z0-9_]+)}")
