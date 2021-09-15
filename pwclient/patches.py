@@ -266,7 +266,7 @@ def get_patch_objects(rpc, filters, submitter_str, delegate_str, series_str, for
     return action_list(rpc, filters, submitter_str, delegate_str, series_str, format_str, get_recs_only=True)
 
 
-def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_str, format_str=None):
+def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_str, format_str=None, get_recs_only=False):
     proj_recs = projects.action_list(rpc, get_recs_only=True)
     all_patches = []
     for (_, linkname_) in tqdm.tqdm(proj_recs):
@@ -287,7 +287,7 @@ def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_
                 break
         except Exception as e:
             print(f"Unable to explore project {linkname_}. Error: {e}")
-    _list_patches(all_patches, rpc=rpc, format_str=format_str, echo_via_pager=True)
+    return _list_patches(all_patches, rpc=rpc, format_str=format_str, echo_via_pager=True, get_recs_only=get_recs_only)
 
 
 def patch_id_to_series(rpc, patch_id):
