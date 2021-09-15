@@ -41,12 +41,27 @@ class Patch(object):
 
         # Add a few things to make it easier...
         self.id = patch_dict["id"]
+        self.project = utils.ensure_str(patch_dict["project"])
         self.project_id = patch_dict["project_id"]
         self.name = patch_dict["name"]
         self.submitter_id = patch_dict["submitter_id"]
 
         # Keep the dict in case we need anything else...
         self.dict = patch_dict
+
+    def csvdict(self) -> dict:
+        return {
+            'id': self.id,
+            'project': self.project,
+            'date': self.time,
+            'filename': self.dict['filename'],
+            'msgid': self.dict['msgid'],
+            'name': self.dict['name'],
+            'state': utils.ensure_str(self.dict['state']),
+            'submitter': utils.ensure_str(self.dict['submitter']),
+            'commit': self.dict["commit_ref"],
+            'hash': self.dict['hash']
+        }
 
     @staticmethod
     def _parse_patch_name(name):
