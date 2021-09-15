@@ -266,10 +266,14 @@ def get_patch_objects(rpc, filters, submitter_str, delegate_str, series_str, for
     return action_list(rpc, filters, submitter_str, delegate_str, series_str, format_str, get_recs_only=True)
 
 
-def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_str, format_str=None, get_recs_only=False):
-    proj_recs = projects.action_list(rpc, get_recs_only=True)
+def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_str, format_str=None, get_recs_only=False,
+                              proj_scope = None):
+    if proj_scope:
+        proj_recs = [(-1, proj) for proj in proj_scope]
+    else:
+        proj_recs = projects.action_list(rpc, get_recs_only=True)
     all_patches = []
-    for (_, linkname_) in tqdm.tqdm(proj_recs):
+    for (_, linkname_) in tqdm.tqdm(proj_recs, disable=get_recs_only):
         # print(f"Exploring project: {linkname_}")
         # override project's link name 
         filters.add('project', linkname_)
@@ -287,7 +291,11 @@ def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_
                 break
         except Exception as e:
             print(f"Unable to explore project {linkname_}. Error: {e}")
-    return _list_patches(all_patches, rpc=rpc, format_str=format_str, echo_via_pager=True, get_recs_only=get_recs_only)
+
+    if get_recs_only:
+        return all_patches
+
+    return _list_patches(all_patches, rpc=rpc, format_str=format_str, echo_via_pager=True)
 
 
 def patch_id_to_series(rpc, patch_id):
