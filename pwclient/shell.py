@@ -122,6 +122,12 @@ def main(argv=sys.argv[1:]):
         if args.patch_name:
             filt.add('name__icontains', args.patch_name)
 
+        if args.since:
+            filt.add('date__gte', args.since)
+
+        if args.before:
+            filt.add('date__lte', args.before)
+
         submitter_str = args.submitter
         delegate_str = args.delegate
         format_str = args.format

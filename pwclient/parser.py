@@ -185,6 +185,16 @@ installed locales.
     list_parser.add_argument(
         '--in-depth', action='store_true', dest='in_depth',
         help="pass '--in-depth' to 'list'")
+    list_parser.add_argument(
+        '--since',
+        help="Only look for patches on or after this date "
+             "(specified in a format that datetime.fromisoformat understands)"
+    )
+    list_parser.add_argument(
+        '--before',
+        help="Only look for patches on or before this date "
+             "(specified in a format that datetime.fromisoformat understands)"
+    )
     list_parser.set_defaults(subcmd='list')
 
     # Poor man's argparse aliases: we register the "search" parser but
