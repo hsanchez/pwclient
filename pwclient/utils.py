@@ -8,6 +8,7 @@ import configparser
 import csv
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -32,6 +33,12 @@ def ensure_str(s: ty.Any) -> str:
 def trim(string: str, length: int = 70) -> str:
     """Trim a string to the given length."""
     return (string[:length - 1] + '...') if len(string) > length else string
+
+
+def strip_trim(string: str, length: int = 70) -> str:
+    # thx to https://stackoverflow.com/questions/14596884/
+    return trim(re.sub("[\(\[].*?[\)\]]", "", string))
+
 
 def git_config(value: str) -> str:
     """Parse config from ``git-config`` cache.

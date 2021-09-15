@@ -113,6 +113,18 @@ installed locales.
         'projects',
         help="list all projects")
     projects_parser.set_defaults(subcmd='projects')
+    
+    
+    people_parser = subparsers.add_parser(
+        'people',
+        help="list people")
+    people_parser.add_argument(
+        'person_name', metavar='PERSON_NAME', nargs='+', action='store', default=[],
+        help="person NAME")
+    people_parser.add_argument(
+        '--exact-name', action='store_true', dest='exact_name',
+        help="pass '--exact-name' to 'people'")
+    people_parser.set_defaults(subcmd='people')
 
     check_get_parser = subparsers.add_parser(
         'check-get', add_help=False,
@@ -185,6 +197,19 @@ installed locales.
     list_parser.add_argument(
         '--in-depth', action='store_true', dest='in_depth',
         help="pass '--in-depth' to 'list'")
+    list_parser.add_argument(
+        '--csv-emails', action='store', dest='csv_emails',
+        help="pass '--csv-emails' to 'list'")
+    list_parser.add_argument(
+        '--since',
+        help="Only look for patches on or after this date "
+             "(specified in a format that datetime.fromisoformat understands)"
+    )
+    list_parser.add_argument(
+        '--before',
+        help="Only look for patches on or before this date "
+             "(specified in a format that datetime.fromisoformat understands)"
+    )
     list_parser.set_defaults(subcmd='list')
 
     # Poor man's argparse aliases: we register the "search" parser but

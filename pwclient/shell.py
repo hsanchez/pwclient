@@ -6,20 +6,13 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import print_function, unicode_literals
 
 import os
+import re
 import sys
 
-from . import checks
-from . import parser
-from . import patches
-from . import projects
-from . import states
-from . import utils
-from . import xmlrpc
-
+from . import checks, parser, patches, people, projects, states, utils, xmlrpc
 
 CONFIG_FILE = os.path.expanduser('~/.pwclientrc')
 
@@ -120,7 +113,13 @@ def main(argv=sys.argv[1:]):
             filt.add('msgid', args.msgid)
 
         if args.patch_name:
-            filt.add('name__icontains', args.patch_name)
+            filt.add('name__icontains', utils.strip_trim(args.patch_name))
+            
+        if args.since:
+            filt.add('date__gte', args.since)
+
+        if args.before:
+            filt.add('date__lte', args.before)
 
         submitter_str = args.submitter
         delegate_str = args.delegate
@@ -128,8 +127,11 @@ def main(argv=sys.argv[1:]):
         series_str = args.series
         
         if args.in_depth:
-            # Check for patches in all projects in 
-            patches.action_list_all_patchwork(rpc, filt, submitter_str, delegate_str, series_str, format_str)
+            if args.csv_emails:
+                patches.action_list_all_patchwork_all_users(rpc, filt, args.csv_emails, format_str)
+            else:
+                # Check for patches in all projects in patchwork
+                patches.action_list_all_patchwork(rpc, filt, submitter_str, delegate_str, series_str, format_str)
         else:
             patches.action_list(rpc, filt, submitter_str, delegate_str, series_str, format_str)
 
@@ -233,6 +235,13 @@ def main(argv=sys.argv[1:]):
             checks.action_create(
                 rpc, patch_id, args.context, args.state, args.target_url,
                 args.description)
+            
+    elif action == 'people':
+        person_names = args.person_name if 'person_name' in args and args.person_name else []
+        for person_name in person_names:
+            person_ids = people.person_ids_by_name(rpc, person_name, exact_match=args.exact_name)
+            for person_id in person_ids:
+                print(people.person_get(rpc, person_id))
 
 
 if __name__ == "__main__":

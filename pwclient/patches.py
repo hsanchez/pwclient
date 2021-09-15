@@ -3,7 +3,6 @@
 # Copyright (C) 2008 Nate Case <ncase@xes-inc.com>
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
-
 import collections
 import io
 import os
@@ -14,6 +13,7 @@ import time
 
 import tqdm
 from dateutil import parser as dateparser
+import pandas as pd
 
 from . import people, projects, states, utils
 from .xmlrpc import xmlrpclib
@@ -21,6 +21,56 @@ from .xmlrpc import xmlrpclib
 _LIST_HEADERS = (
     'ID', 'Date', 'Name', 'Submitter', 'State', 'Archived', 'Delegate', 'MessageId', 'CommitRef')
 
+REGEX_GREG_ADDED = re.compile('patch \".*\" added to .*')
+
+BOTS = {'tip-bot2@linutronix.de', 'tipbot@zytor.com', 'tip-bot2@tip-bot2', 'lkp@ff58d72860ac', 'lkp@shao2-debian',
+        'lkp@xsang-OptiPlex-9020', 'rong.a.chen@shao2-debian', 'lkp@b50bd4e4e446', 'rong.a.chen@shao2-debian',
+        'noreply@ciplatform.org', 'patchwork@emeril.freedesktop.org', 'pr-tracker-bot@kernel.org'}
+POTENTIAL_BOTS = {'broonie@kernel.org', 'lkp@intel.com', 'boqun.feng@debian-boqun.qqnc3lrjykvubdpftowmye0fmh.lx.internal.cloudapp.net'}
+PROCESSES = ['linux-next', 'git pull', 'rfc', '[pull]']
+
+def _is_from_bot(patch):
+    email_address = patch['email']
+    if email_address in BOTS:
+        return True
+    
+    subject_line = patch['name']
+    if email_address in POTENTIAL_BOTS:
+        # Mark Brown's bot and lkp
+        if subject_line.startswith('applied'):
+            return True
+    sender_name = patch['senderName']
+    if 'tip-bot2' in sender_name or 'syzbot' in sender_name:
+        return True
+    if sender_name in POTENTIAL_BOTS:
+        return True
+    if 'kernel test robot' in sender_name:
+        return True
+    
+    if REGEX_GREG_ADDED.match(subject_line):
+        return True
+    
+    # AKPM's bot. AKPM uses s-nail for automated mails, and sylpheed for all
+    # other mails. That's how we can easily separate automated mails from
+    # real mails. Further, akpm acts as bot if the subject contains [merged]
+    if email_address == 'akpm@linux-foundation.org':
+        if '[merged]' in subject_line:
+            return True
+
+    # syzbot - email format: syzbot-hash@syzkaller.appspotmail.com
+    if 'syzbot' in email_address and 'syzkaller.appspotmail.com' in email_address:
+        return True
+    
+    # Github Bot
+    if 'noreply@github.com' in email_address:
+        return True
+    
+    # Buildroot's daily results bot
+    if '[autobuild.buildroot.net] daily results' in subject_line or \
+        'oe-core cve metrics' in subject_line:
+            return True
+    
+    return False
 
 class Patch(object):
     """Nicer representation of a patch from the server."""
@@ -147,7 +197,8 @@ def patch_id_from_hash(rpc, project, hash):
 def _list_patches(patches, rpc=None, format_str=None, get_recs_only=False, echo_via_pager=False):
     """Dump a list of patches to stdout."""
     if get_recs_only and not echo_via_pager:
-        return [patch for patch in patches]
+        return patches
+        # return [patch for patch in patches]
     elif echo_via_pager:
         assert rpc is not None
         def person_info_str(person_dic):
@@ -262,31 +313,97 @@ def action_list(rpc, filters, submitter_str, delegate_str, series_str, format_st
     return _list_patches(patches, format_str, get_recs_only=get_recs_only)
 
 
-def get_patch_objects(rpc, filters, submitter_str, delegate_str, series_str, format_str=None):
-    return action_list(rpc, filters, submitter_str, delegate_str, series_str, format_str, get_recs_only=True)
+def patch_author_found(rpc, submitter_str, delegate_str):
+    if submitter_str and delegate_str:
+        submitter_ids = people.person_ids_by_name(rpc, submitter_str)
+        delegate_ids = people.person_ids_by_name(rpc, delegate_str)
+    
+        if len(submitter_ids) == 0 or len(delegate_ids) == 0:
+            return False
+    elif submitter_str and not delegate_str:
+        submitter_ids = people.person_ids_by_name(rpc, submitter_str)
+        if len(submitter_ids) == 0:
+            return False
+    elif not submitter_str and delegate_str:
+        delegate_ids = people.person_ids_by_name(rpc, delegate_str)
+        if len(delegate_ids) == 0:
+            return False
+    elif not submitter_str and not delegate_str:
+        return False
+    
+    return True
 
 
-def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_str, format_str=None):
-    proj_recs = projects.action_list(rpc, get_recs_only=True)
+def _patches_from_pw_projects(rpc, filters, submitter_str, delegate_str=None, series_str=None, format_str=None):
     all_patches = []
-    for (_, linkname_) in tqdm.tqdm(proj_recs):
-        # print(f"Exploring project: {linkname_}")
+    
+    # # Guard clause to prevent making unnecessary 
+    # # calls for every single project, when submitter is not found
+    # if not patch_author_found(rpc, submitter_str, delegate_str):
+    #     print(f"Nobody found matching either *{submitter_str}* or *{delegate_str}*\n")
+    #     return all_patches
+    
+    proj_recs = projects.action_list(rpc, get_recs_only=True)
+    for (_, linkname_) in proj_recs:
         # override project's link name 
         filters.add('project', linkname_)
         try:
-            matched = get_patch_objects(rpc, filters, submitter_str, delegate_str, series_str, format_str)
+            
+            matched = action_list(rpc, filters, submitter_str, delegate_str,
+                                  series_str, format_str=format_str, get_recs_only=True)
+
             if matched and len(matched) > 0:
                 all_patches += matched
-                # print(f"Matched found. Found {len(matched)} patches for {linkname_}")
 
             # break if msg id has been found
-            if matched and 'msgid' in filters.d:
+            if len(matched) > 0 and 'msgid' in filters.d:
                 break
             # break if series given series_str (or patch_id) has been fetched
-            elif matched and series_str:
+            elif len(matched) > 0 and series_str:
                 break
         except Exception as e:
             print(f"Unable to explore project {linkname_}. Error: {e}")
+    return all_patches
+
+def action_list_all_patchwork_all_users(rpc, filters, mailing_list_csv, format_str=None):
+    
+    def _query(row):
+        return {'email': row.senderEmail, 'name': row.subject, 'senderName': row.senderName}
+
+    emails = pd.read_csv(os.path.abspath(mailing_list_csv))
+    email_tuples = emails[['emailId', 'senderName', 'senderEmail', 'subject', 'replyto']]
+    
+    if 'name__icontains' in filters.d:
+        global_name = filters.d['name__icontains']
+        print(f"Ignoring global name: {global_name}")
+        
+    # Filter out bots
+    valid_tuples = [row for row in tqdm.tqdm(email_tuples.itertuples(), desc='non-bots') if not _is_from_bot(_query(row))]
+    print(len(email_tuples), len(valid_tuples))
+    valid_tuples = [row for row in tqdm.tqdm(valid_tuples, desc='keep-1st-email') if utils.ensure_str(row.replyto) == 'nan']
+    print("then,", len(valid_tuples))
+    valid_tuples = [row for row in tqdm.tqdm(valid_tuples, desc='keep-real-people') if patch_author_found(rpc, row.senderName, None)]
+    print("then,", len(valid_tuples))
+    
+    print(f"{len(valid_tuples)} to explore.")
+    
+    all_patches = []
+    for row in tqdm.tqdm(valid_tuples[:5], desc='pw.get(email)'):
+        filters.add('name__icontains', utils.strip_trim(row.subject))
+        print(f"processing {row.senderName}, {utils.strip_trim(row.subject)}")
+        
+        # if _is_from_bot({'email': row.senderEmail, 'name': row.subject}):
+        #     continue
+        
+        # if row.replyto != 'NA':
+        #     all_patches += _patches_from_pw_projects(rpc, filters, row.senderName, format_str=format_str)
+        
+        all_patches += _patches_from_pw_projects(rpc, filters, row.senderName, format_str=format_str)
+    
+    _list_patches(all_patches, rpc=rpc, format_str=format_str, echo_via_pager=True)
+
+def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_str, format_str=None):
+    all_patches = _patches_from_pw_projects(rpc, filters, submitter_str, delegate_str, series_str, format_str=format_str)
     _list_patches(all_patches, rpc=rpc, format_str=format_str, echo_via_pager=True)
 
 
