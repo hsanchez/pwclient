@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import time
+from typing import List
 
 import tqdm
 from dateutil import parser as dateparser
@@ -62,6 +63,9 @@ class Patch(object):
             'commit': self.dict["commit_ref"],
             'hash': self.dict['hash']
         }
+
+    def csv_headers(self) -> List[str]:
+        return list(self.csvdict().keys())
 
     @staticmethod
     def _parse_patch_name(name):
