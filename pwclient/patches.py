@@ -309,7 +309,8 @@ def action_list_all_patchwork(rpc, filters, submitter_str, delegate_str, series_
             elif matched and series_str:
                 break
         except Exception as e:
-            print(f"Unable to explore project {linkname_}. Error: {e}")
+            # print(f"Unable to explore project {linkname_}. Error: {e}", file=sys.stderr)
+            raise e
 
     if get_recs_only:
         return all_patches
