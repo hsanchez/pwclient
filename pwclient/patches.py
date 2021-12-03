@@ -127,8 +127,9 @@ class Filter(object):
         if self.project is not None:
             id = projects.project_id_by_name(rpc, self.project)
             if id == 0:
-                sys.stderr.write("Note: No Project found matching %s, "
-                                 "ignoring filter\n" % self.project)
+                #sys.stderr.write("Note: No Project found matching %s, "
+                #                 "ignoring filter\n" % self.
+                pass
             else:
                 self.d['project_id'] = id
 
