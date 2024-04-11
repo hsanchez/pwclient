@@ -6,20 +6,12 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import print_function, unicode_literals
 
 import os
 import sys
 
-from . import checks
-from . import parser
-from . import patches
-from . import projects
-from . import states
-from . import utils
-from . import xmlrpc
-
+from . import checks, parser, patches, people, projects, states, utils, xmlrpc
 
 CONFIG_FILE = os.path.expanduser('~/.pwclientrc')
 
@@ -134,7 +126,7 @@ def main(argv=sys.argv[1:]):
         series_str = args.series
         
         if args.in_depth:
-            # Check for patches in all projects in 
+            # Check for patches in all projects in patchwork
             patches.action_list_all_patchwork(rpc, filt, submitter_str, delegate_str, series_str, format_str)
         else:
             patches.action_list(rpc, filt, submitter_str, delegate_str, series_str, format_str)
@@ -239,7 +231,20 @@ def main(argv=sys.argv[1:]):
             checks.action_create(
                 rpc, patch_id, args.context, args.state, args.target_url,
                 args.description)
-
+            
+    elif action == 'people':
+        person_dict_arr = []
+        person_names = args.person_name if 'person_name' in args and args.person_name else []
+        for person_name in person_names:
+            person_ids = people.person_ids_by_name(rpc, person_name, exact_match=args.exact_name)          
+            for person_id in set(person_ids):
+                person_dic = dict()
+                person_info = people.person_get(rpc, person_id)
+                person_dic['id'] = person_id
+                person_dic['name'] = person_info['name']
+                person_dic['email'] = person_info['email']
+                person_dict_arr += [person_dic]
+        people.list_people(person_dict_arr, args.format or 'simple')
 
 if __name__ == "__main__":
     try:
